@@ -193,6 +193,16 @@
     opacity: 0.5;
     margin-top: 3px;
   }
+  .edit-btn{
+    flex:none;
+    background:none;
+    border:none;
+    font-size: 15px;
+    color: var(--olive-dark);
+    opacity: 0.55;
+    cursor:pointer;
+    padding: 2px 4px;
+  }
   .del-btn{
     flex:none;
     background:none;
@@ -278,6 +288,7 @@ function render(){
         <div class="item-text">${item.text}</div>
         <div class="item-time">${timeAgo(item.createdAt)}</div>
       </div>
+      <button class="edit-btn" data-edit="${item.id}">✏️</button>
       <button class="del-btn" data-del="${item.id}">✕</button>
     `;
     list.appendChild(li);
@@ -287,6 +298,7 @@ function render(){
 document.getElementById('itemList').addEventListener('click', (e) => {
   const checkBtn = e.target.closest('.checkbox');
   const delBtn = e.target.closest('.del-btn');
+  const editBtn = e.target.closest('.edit-btn');
   if(checkBtn){
     const id = checkBtn.dataset.id;
     const it = items.find(i => String(i.id) === id);
@@ -296,6 +308,17 @@ document.getElementById('itemList').addEventListener('click', (e) => {
     const id = delBtn.dataset.del;
     items = items.filter(i => String(i.id) !== id);
     save(); render();
+  }
+  if(editBtn){
+    const id = editBtn.dataset.edit;
+    const it = items.find(i => String(i.id) === id);
+    if(it){
+      const newText = prompt('내용을 수정해주세요', it.text);
+      if(newText !== null && newText.trim()){
+        it.text = newText.trim();
+        save(); render();
+      }
+    }
   }
 });
 
