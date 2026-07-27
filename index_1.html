@@ -21,7 +21,7 @@
     --paper: #FBF8F0;
   }
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body{ height: 100%; }
+  html, body{ height: 100%; overflow-x: hidden; }
   body{
     margin:0;
     font-family: 'Pretendard', -apple-system, sans-serif;
@@ -324,21 +324,29 @@
   /* ---- 스케줄 모달 ---- */
   .modal-overlay{
     position: fixed;
-    inset: 0;
-    background: rgba(61,46,36,0.45);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(61,46,36,0.45);
     display:flex;
     align-items:center;
     justify-content:center;
-    z-index: 50;
+    z-index: 999;
     padding: 20px;
+    box-sizing: border-box;
   }
   .modal-box{
     background: var(--paper);
     border: 2px solid var(--brown);
     border-radius: 16px;
-    padding: 22px;
+    padding: 20px 16px;
     width: 100%;
-    max-width: 320px;
+    max-width: 340px;
+    box-sizing: border-box;
+    overflow: hidden;
     display:flex;
     flex-direction: column;
     gap: 12px;
@@ -351,13 +359,21 @@
   }
   .modal-input{
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    display: block;
+    -webkit-appearance: none;
+    appearance: none;
     padding: 10px 12px;
+    margin: 0;
     border-radius: 10px;
     border: 2px solid var(--brown);
     font-family: 'Pretendard', sans-serif;
     font-size: 14px;
     background: var(--cream);
     color: var(--brown);
+    text-align: left;
   }
   .modal-actions{
     display:flex;
@@ -509,6 +525,7 @@
         <button id="nextMonthBtn" class="cal-nav-btn">›</button>
       </div>
     </div>
+    <div id="weatherStatus" style="text-align:center; font-size:11px; color:#3D2E24; opacity:0.6; margin-bottom:6px;"></div>
     <div class="cal-weekdays">
       <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
     </div>
@@ -655,20 +672,34 @@ function weatherIcon(code){
   return '';
 }
 
+function setWeatherStatus(msg){
+  const el = document.getElementById('weatherStatus');
+  if(el) el.textContent = msg;
+}
+
 function fetchWeather(lat, lon){
+  setWeatherStatus(`날씨 불러오는 중... (${lat.toFixed(2)}, ${lon.toFixed(2)})`);
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode&timezone=auto&forecast_days=16`;
   fetch(url)
-    .then(res => res.json())
+    .then(res => {
+      if(!res.ok) throw new Error('응답 오류 ' + res.status);
+      return res.json();
+    })
     .then(data => {
       if(data && data.daily && data.daily.time){
         data.daily.time.forEach((dateStr, i) => {
           weatherByDate[dateStr] = data.daily.weathercode[i];
         });
         localStorage.setItem('tteoolradda-weather', JSON.stringify({ data: weatherByDate, fetchedAt: Date.now() }));
+        setWeatherStatus(`날씨 ${data.daily.time.length}일치 불러옴 ✓`);
         renderCalendar();
+      } else {
+        setWeatherStatus('날씨 응답에 데이터가 없어요');
       }
     })
-    .catch(() => {});
+    .catch((err) => {
+      setWeatherStatus('날씨 실패: ' + err.message);
+    });
 }
 
 function initWeather(){
@@ -676,16 +707,19 @@ function initWeather(){
   const oneHour = 60 * 60 * 1000;
   if(cached && cached.fetchedAt && (Date.now() - cached.fetchedAt) < oneHour){
     weatherByDate = cached.data;
+    setWeatherStatus('저장된 날씨 사용 중 ✓');
     return;
   }
   const fallbackLat = 37.6584, fallbackLon = 126.8320;
   if(navigator.geolocation){
+    setWeatherStatus('위치 확인 중...');
     navigator.geolocation.getCurrentPosition(
       (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
-      () => fetchWeather(fallbackLat, fallbackLon),
+      (err) => { setWeatherStatus('위치 실패(' + err.message + '), 고양시로 시도'); fetchWeather(fallbackLat, fallbackLon); },
       { timeout: 5000 }
     );
   } else {
+    setWeatherStatus('위치 기능 없음, 고양시로 시도');
     fetchWeather(fallbackLat, fallbackLon);
   }
 }
