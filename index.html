@@ -213,6 +213,9 @@
   }
   .cal-day{
     min-height: 78px;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
     display:flex;
     flex-direction: column;
     align-items:stretch;
@@ -222,6 +225,7 @@
     border: 1.5px solid transparent;
     cursor: pointer;
     position: relative;
+    overflow: hidden;
   }
   .cal-day .day-num{
     font-size: 12px;
@@ -247,6 +251,7 @@
     display:flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
   .cal-event-chip{
     font-size: 10px;
@@ -259,6 +264,9 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   .cal-event-chip.is-todo{ background: var(--salmon); }
   .cal-event-chip.done{
@@ -536,7 +544,6 @@
       </div>
     </div>
     <div id="weatherStatus" style="text-align:center; font-size:11px; color:#3D2E24; opacity:0.6; margin-bottom:6px;"></div>
-    <button id="addEventBtn" class="add-event-btn">+ 새 일정 추가</button>
     <div class="cal-weekdays">
       <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
     </div>
@@ -857,10 +864,12 @@ function renderDayDetail(dateStr){
   const panel = document.getElementById('dayDetail');
   const [y,m,d] = dateStr.split('-');
   const dayEntries = getDayEntries(dateStr);
+  const addBtnHtml = `<button class="add-event-btn" data-addevent="${dateStr}">+ 이 날짜에 일정 추가</button>`;
 
   if(dayEntries.length === 0){
     panel.innerHTML = `
       <div class="day-detail-header">${parseInt(m)}월 ${parseInt(d)}일</div>
+      ${addBtnHtml}
       <div class="day-detail-empty">이 날짜에 정해진 일정이 없어요</div>
     `;
     return;
@@ -878,7 +887,7 @@ function renderDayDetail(dateStr){
     </div>`;
   }
 
-  let html = `<div class="day-detail-header">${parseInt(m)}월 ${parseInt(d)}일</div>`;
+  let html = `<div class="day-detail-header">${parseInt(m)}월 ${parseInt(d)}일</div>${addBtnHtml}`;
 
   if(untimed.length > 0){
     html += `<div class="day-detail-section-label">시간 미정</div>`;
@@ -894,6 +903,7 @@ function renderDayDetail(dateStr){
 document.getElementById('dayDetail').addEventListener('click', (e) => {
   const checkBtn = e.target.closest('[data-daycheck]');
   const delBtn = e.target.closest('[data-daydel]');
+  const addBtn = e.target.closest('[data-addevent]');
   if(checkBtn){
     const [src, id] = checkBtn.dataset.daycheck.split(':');
     toggleEntryDone(src, id);
@@ -905,6 +915,9 @@ document.getElementById('dayDetail').addEventListener('click', (e) => {
     deleteEntry(src, id);
     renderDayDetail(selectedDateStr);
     renderCalendar();
+  }
+  if(addBtn){
+    openEventModal(addBtn.dataset.addevent);
   }
 });
 
@@ -963,9 +976,9 @@ document.getElementById('schedNoTimeBtn').addEventListener('click', () => {
 // ---------- 새 일정(캘린더 전용) 추가 모달 ----------
 const eventModal = document.getElementById('eventModal');
 
-function openEventModal(){
+function openEventModal(dateStr){
   document.getElementById('eventTextInput').value = '';
-  document.getElementById('eventDateInput').value = selectedDateStr || toDateStr(new Date());
+  document.getElementById('eventDateInput').value = dateStr || selectedDateStr || toDateStr(new Date());
   document.getElementById('eventTimeInput').value = '';
   eventModal.style.display = 'flex';
   setTimeout(() => document.getElementById('eventTextInput').focus(), 50);
@@ -974,7 +987,6 @@ function closeEventModal(){
   eventModal.style.display = 'none';
 }
 
-document.getElementById('addEventBtn').addEventListener('click', openEventModal);
 document.getElementById('eventCancelBtn').addEventListener('click', closeEventModal);
 
 function saveNewEvent(withTime){
