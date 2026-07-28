@@ -515,6 +515,7 @@
     <h1>떠올랐다! 💡</h1>
     <p>말하면 바로 기록돼요. 처리했으면 톡 체크!</p>
     <button id="openCalendarBtn" class="cal-toggle-btn">📅 캘린더로 보기</button>
+    <button id="openScheduledBtn" class="cal-toggle-btn" style="margin-top:8px;">📋 캘린더 이동 스케줄 확인</button>
   </header>
 
   <div class="mic-zone">
@@ -549,6 +550,16 @@
     </div>
     <div id="calGrid" class="cal-grid"></div>
     <div id="dayDetail" class="day-detail"></div>
+  </div>
+
+  <div id="scheduledView" class="calendar-view" style="display:none">
+    <div class="cal-header">
+      <button id="backToListFromScheduledBtn" class="cal-toggle-btn">← 떠올랐다!</button>
+      <div class="cal-nav">
+        <span class="cal-month-label">캘린더로 보낸 일정</span>
+      </div>
+    </div>
+    <ul id="scheduledList" style="list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px;"></ul>
   </div>
 </div>
 
@@ -600,10 +611,11 @@ function timeAgo(ts){
 
 function render(){
   const list = document.getElementById('itemList');
-  const pending = items.filter(i => !i.done);
+  const unscheduled = items.filter(i => !i.scheduledDate);
+  const pending = unscheduled.filter(i => !i.done);
   document.getElementById('pendingCount').textContent = pending.length;
 
-  const visible = showDone ? items : pending;
+  const visible = showDone ? unscheduled : pending;
   list.innerHTML = '';
 
   if(visible.length === 0){
@@ -619,7 +631,6 @@ function render(){
       <div class="item-body">
         <div class="item-text">${item.text}</div>
         <div class="item-time">${timeAgo(item.createdAt)}</div>
-        ${item.scheduledDate ? `<span class="item-schedule">📅 ${formatScheduleBadge(item)}</span>` : ''}
       </div>
       <button class="sched-btn" data-sched="${item.id}">📅</button>
       <button class="edit-btn" data-edit="${item.id}">✏️</button>
@@ -673,6 +684,7 @@ function formatScheduleBadge(item){
 // ---------- 화면 전환 ----------
 const listView = document.getElementById('listView');
 const calendarView = document.getElementById('calendarView');
+const scheduledView = document.getElementById('scheduledView');
 
 document.getElementById('openCalendarBtn').addEventListener('click', () => {
   listView.style.display = 'none';
@@ -682,6 +694,65 @@ document.getElementById('openCalendarBtn').addEventListener('click', () => {
 document.getElementById('backToListBtn').addEventListener('click', () => {
   calendarView.style.display = 'none';
   listView.style.display = 'block';
+});
+
+document.getElementById('openScheduledBtn').addEventListener('click', () => {
+  listView.style.display = 'none';
+  scheduledView.style.display = 'block';
+  renderScheduledList();
+});
+document.getElementById('backToListFromScheduledBtn').addEventListener('click', () => {
+  scheduledView.style.display = 'none';
+  listView.style.display = 'block';
+});
+
+function renderScheduledList(){
+  const listEl = document.getElementById('scheduledList');
+  const scheduled = items
+    .filter(i => i.scheduledDate)
+    .sort((a,b) => (a.scheduledDate + (a.scheduledTime||'99:99')).localeCompare(b.scheduledDate + (b.scheduledTime||'99:99')));
+
+  if(scheduled.length === 0){
+    listEl.innerHTML = `<div class="empty">캘린더로 보낸 일정이 아직 없어요.<br>목록에서 📅 버튼을 눌러 날짜를 정해보세요!</div>`;
+    return;
+  }
+
+  listEl.innerHTML = scheduled.map(item => `
+    <li class="item${item.done ? ' done' : ''}">
+      <button class="checkbox ${item.done ? 'done' : ''}" data-schedcheck="${item.id}">${item.done ? '✓' : ''}</button>
+      <div class="item-body">
+        <div class="item-text">${item.text}</div>
+        <span class="item-schedule">📅 ${formatScheduleBadge(item)}</span>
+      </div>
+      <button class="edit-btn" data-schededit="${item.id}">✏️</button>
+      <button class="del-btn" data-schedunset="${item.id}">✕</button>
+    </li>
+  `).join('');
+}
+
+document.getElementById('scheduledList').addEventListener('click', (e) => {
+  const checkBtn = e.target.closest('[data-schedcheck]');
+  const editBtn = e.target.closest('[data-schededit]');
+  const unsetBtn = e.target.closest('[data-schedunset]');
+  if(checkBtn){
+    const it = items.find(i => String(i.id) === checkBtn.dataset.schedcheck);
+    if(it){ it.done = !it.done; save(); renderScheduledList(); }
+  }
+  if(editBtn){
+    const it = items.find(i => String(i.id) === editBtn.dataset.schededit);
+    if(it){
+      const newText = prompt('내용을 수정해주세요', it.text);
+      if(newText !== null && newText.trim()){ it.text = newText.trim(); save(); renderScheduledList(); }
+    }
+  }
+  if(unsetBtn){
+    const it = items.find(i => String(i.id) === unsetBtn.dataset.schedunset);
+    if(it && confirm('캘린더 일정을 해제하고 다시 할일 목록으로 보낼까요?')){
+      it.scheduledDate = null;
+      it.scheduledTime = null;
+      save(); render(); renderScheduledList();
+    }
+  }
 });
 
 // ---------- 날씨 ----------
@@ -816,8 +887,10 @@ function renderCalendar(){
   for(let d = 1; d <= daysInMonth; d++){
     cells.push({ day: d, other: false, dateStr: `${year}-${pad2(month+1)}-${pad2(d)}` });
   }
+  let nextMonthDay = 1;
   while(cells.length % 7 !== 0){
-    cells.push({ day: cells.length, other: true, dateStr: null });
+    cells.push({ day: nextMonthDay, other: true, dateStr: null });
+    nextMonthDay++;
   }
 
   cells.forEach(cell => {
