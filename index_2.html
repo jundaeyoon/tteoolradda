@@ -209,26 +209,26 @@
   .cal-grid{
     display:grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
+    gap: 3px;
   }
   .cal-day{
-    min-height: 64px;
+    min-height: 78px;
     display:flex;
     flex-direction: column;
     align-items:stretch;
-    padding: 4px 3px;
-    border-radius: 10px;
+    padding: 4px 3px 6px;
+    border-radius: 8px;
     background: var(--paper);
     border: 1.5px solid transparent;
     cursor: pointer;
     position: relative;
-    overflow: hidden;
   }
   .cal-day .day-num{
     font-size: 12px;
     font-weight: 700;
     color: var(--brown);
-    margin-bottom: 2px;
+    margin-bottom: 3px;
+    padding-right: 18px;
   }
   .cal-day-weather{
     position: absolute;
@@ -238,7 +238,8 @@
     height: 18px;
     object-fit: contain;
   }
-  .cal-day.other-month{ opacity: 0.28; }
+  .cal-day.other-month{ opacity: 0.35; }
+  .cal-day.today{ border-color: var(--salmon); }
   .cal-day.today .day-num{ color: var(--salmon-dark); }
   .cal-day.selected{ background: var(--salmon); border-color: var(--salmon-dark); }
   .cal-day.selected .day-num{ color: var(--paper); }
@@ -248,30 +249,39 @@
     gap: 2px;
   }
   .cal-event-chip{
-    font-size: 9.5px;
-    line-height: 1.3;
-    font-weight: 600;
-    color: var(--olive-dark);
-    background: var(--cream);
-    border-radius: 4px;
-    padding: 1px 4px;
+    font-size: 10px;
+    line-height: 1.5;
+    font-weight: 700;
+    color: var(--paper);
+    background: var(--olive);
+    border-radius: 5px;
+    padding: 1px 5px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .cal-event-chip.is-todo{ background: var(--salmon); }
   .cal-event-chip.done{
     text-decoration: line-through;
-    opacity: 0.55;
+    opacity: 0.6;
+    background: var(--brown);
   }
   .cal-day.selected .cal-event-chip{
-    background: rgba(255,255,255,0.75);
+    background: rgba(255,255,255,0.85);
+    color: var(--olive-dark);
   }
-  .cal-more-label{
-    font-size: 9px;
+  .add-event-btn{
+    display:block;
+    width: 100%;
+    margin: 4px 0 14px;
+    background: var(--olive);
+    color: var(--paper);
+    border: 2px solid var(--olive-dark);
+    border-radius: 12px;
+    padding: 10px;
+    font-size: 14px;
     font-weight: 700;
-    color: var(--brown);
-    opacity: 0.55;
-    padding-left: 4px;
+    cursor:pointer;
   }
 
   .day-detail{
@@ -324,21 +334,29 @@
   /* ---- 스케줄 모달 ---- */
   .modal-overlay{
     position: fixed;
-    inset: 0;
-    background: rgba(61,46,36,0.45);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(61,46,36,0.45);
     display:flex;
     align-items:center;
     justify-content:center;
-    z-index: 50;
+    z-index: 999;
     padding: 20px;
+    box-sizing: border-box;
   }
   .modal-box{
     background: var(--paper);
     border: 2px solid var(--brown);
     border-radius: 16px;
-    padding: 22px;
+    padding: 20px 16px;
     width: 100%;
-    max-width: 320px;
+    max-width: 340px;
+    box-sizing: border-box;
+    overflow: hidden;
     display:flex;
     flex-direction: column;
     gap: 12px;
@@ -351,13 +369,21 @@
   }
   .modal-input{
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    display: block;
+    -webkit-appearance: none;
+    appearance: none;
     padding: 10px 12px;
+    margin: 0;
     border-radius: 10px;
     border: 2px solid var(--brown);
     font-family: 'Pretendard', sans-serif;
     font-size: 14px;
     background: var(--cream);
     color: var(--brown);
+    text-align: left;
   }
   .modal-actions{
     display:flex;
@@ -509,11 +535,27 @@
         <button id="nextMonthBtn" class="cal-nav-btn">›</button>
       </div>
     </div>
+    <div id="weatherStatus" style="text-align:center; font-size:11px; color:#3D2E24; opacity:0.6; margin-bottom:6px;"></div>
+    <button id="addEventBtn" class="add-event-btn">+ 새 일정 추가</button>
     <div class="cal-weekdays">
       <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
     </div>
     <div id="calGrid" class="cal-grid"></div>
     <div id="dayDetail" class="day-detail"></div>
+  </div>
+</div>
+
+<div id="eventModal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">새 일정 추가</div>
+    <input type="text" id="eventTextInput" class="modal-input" placeholder="일정 내용을 입력하세요">
+    <input type="date" id="eventDateInput" class="modal-input">
+    <input type="time" id="eventTimeInput" class="modal-input">
+    <div class="modal-actions">
+      <button id="eventNoTimeBtn" class="modal-btn-secondary">시간 없이 저장</button>
+      <button id="eventSaveBtn" class="modal-btn-primary">저장</button>
+    </div>
+    <button id="eventCancelBtn" class="modal-cancel">취소</button>
   </div>
 </div>
 
@@ -655,20 +697,34 @@ function weatherIcon(code){
   return '';
 }
 
+function setWeatherStatus(msg){
+  const el = document.getElementById('weatherStatus');
+  if(el) el.textContent = msg;
+}
+
 function fetchWeather(lat, lon){
+  setWeatherStatus(`날씨 불러오는 중... (${lat.toFixed(2)}, ${lon.toFixed(2)})`);
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode&timezone=auto&forecast_days=16`;
   fetch(url)
-    .then(res => res.json())
+    .then(res => {
+      if(!res.ok) throw new Error('응답 오류 ' + res.status);
+      return res.json();
+    })
     .then(data => {
       if(data && data.daily && data.daily.time){
         data.daily.time.forEach((dateStr, i) => {
           weatherByDate[dateStr] = data.daily.weathercode[i];
         });
         localStorage.setItem('tteoolradda-weather', JSON.stringify({ data: weatherByDate, fetchedAt: Date.now() }));
+        setWeatherStatus(`날씨 ${data.daily.time.length}일치 불러옴 ✓`);
         renderCalendar();
+      } else {
+        setWeatherStatus('날씨 응답에 데이터가 없어요');
       }
     })
-    .catch(() => {});
+    .catch((err) => {
+      setWeatherStatus('날씨 실패: ' + err.message);
+    });
 }
 
 function initWeather(){
@@ -676,16 +732,19 @@ function initWeather(){
   const oneHour = 60 * 60 * 1000;
   if(cached && cached.fetchedAt && (Date.now() - cached.fetchedAt) < oneHour){
     weatherByDate = cached.data;
+    setWeatherStatus('저장된 날씨 사용 중 ✓');
     return;
   }
   const fallbackLat = 37.6584, fallbackLon = 126.8320;
   if(navigator.geolocation){
+    setWeatherStatus('위치 확인 중...');
     navigator.geolocation.getCurrentPosition(
       (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
-      () => fetchWeather(fallbackLat, fallbackLon),
+      (err) => { setWeatherStatus('위치 실패(' + err.message + '), 고양시로 시도'); fetchWeather(fallbackLat, fallbackLon); },
       { timeout: 5000 }
     );
   } else {
+    setWeatherStatus('위치 기능 없음, 고양시로 시도');
     fetchWeather(fallbackLat, fallbackLon);
   }
 }
@@ -694,6 +753,40 @@ initWeather();
 // ---------- 월간 캘린더 ----------
 let calDate = new Date();
 let selectedDateStr = null;
+
+const CAL_EVENTS_KEY = 'tteoolradda-calendar-events';
+let calendarEvents = JSON.parse(localStorage.getItem(CAL_EVENTS_KEY) || '[]');
+function saveCalEvents(){ localStorage.setItem(CAL_EVENTS_KEY, JSON.stringify(calendarEvents)); }
+
+function getDayEntries(dateStr){
+  const fromItems = items
+    .filter(i => i.scheduledDate === dateStr)
+    .map(i => ({ id: i.id, text: i.text, time: i.scheduledTime, done: i.done, src: 'item' }));
+  const fromEvents = calendarEvents
+    .filter(e => e.date === dateStr)
+    .map(e => ({ id: e.id, text: e.text, time: e.time, done: e.done, src: 'event' }));
+  return [...fromItems, ...fromEvents];
+}
+
+function toggleEntryDone(src, id){
+  if(src === 'item'){
+    const it = items.find(i => String(i.id) === String(id));
+    if(it){ it.done = !it.done; save(); }
+  } else {
+    const ev = calendarEvents.find(e => String(e.id) === String(id));
+    if(ev){ ev.done = !ev.done; saveCalEvents(); }
+  }
+}
+
+function deleteEntry(src, id){
+  if(src === 'item'){
+    const it = items.find(i => String(i.id) === String(id));
+    if(it){ it.scheduledDate = null; it.scheduledTime = null; save(); render(); }
+  } else {
+    calendarEvents = calendarEvents.filter(e => String(e.id) !== String(id));
+    saveCalEvents();
+  }
+}
 
 function renderCalendar(){
   const year = calDate.getFullYear();
@@ -726,20 +819,18 @@ function renderCalendar(){
     if(cell.dateStr === todayStr) div.classList.add('today');
     if(cell.dateStr && cell.dateStr === selectedDateStr) div.classList.add('selected');
 
-    const count = cell.dateStr ? items.filter(i => i.scheduledDate === cell.dateStr).length : 0;
     let eventsHtml = '';
-    if(cell.dateStr && count > 0){
-      const dayItems = items
-        .filter(i => i.scheduledDate === cell.dateStr)
-        .sort((a,b) => (a.scheduledTime || '99:99').localeCompare(b.scheduledTime || '99:99'));
-      const maxShow = 3;
-      const shown = dayItems.slice(0, maxShow);
-      const chips = shown.map(it => {
-        const label = (it.scheduledTime ? it.scheduledTime + ' ' : '') + it.text;
-        return `<div class="cal-event-chip${it.done ? ' done' : ''}">${label}</div>`;
-      }).join('');
-      const moreLabel = dayItems.length > maxShow ? `<div class="cal-more-label">+${dayItems.length - maxShow}개 더</div>` : '';
-      eventsHtml = `<div class="cal-day-events">${chips}${moreLabel}</div>`;
+    if(cell.dateStr){
+      const dayEntries = getDayEntries(cell.dateStr)
+        .sort((a,b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+      if(dayEntries.length > 0){
+        const chips = dayEntries.map(entry => {
+          const label = (entry.time ? entry.time + ' ' : '') + entry.text;
+          const cls = 'cal-event-chip' + (entry.src === 'item' ? ' is-todo' : '') + (entry.done ? ' done' : '');
+          return `<div class="${cls}">${label}</div>`;
+        }).join('');
+        eventsHtml = `<div class="cal-day-events">${chips}</div>`;
+      }
     }
     const weatherEmoji = cell.dateStr && weatherByDate[cell.dateStr] !== undefined ? weatherIcon(weatherByDate[cell.dateStr]) : '';
     const weatherHtml = weatherEmoji ? `<img class="cal-day-weather" src="${weatherEmoji}" alt="날씨">` : '';
@@ -765,9 +856,9 @@ function renderCalendar(){
 function renderDayDetail(dateStr){
   const panel = document.getElementById('dayDetail');
   const [y,m,d] = dateStr.split('-');
-  const dayItems = items.filter(i => i.scheduledDate === dateStr);
+  const dayEntries = getDayEntries(dateStr);
 
-  if(dayItems.length === 0){
+  if(dayEntries.length === 0){
     panel.innerHTML = `
       <div class="day-detail-header">${parseInt(m)}월 ${parseInt(d)}일</div>
       <div class="day-detail-empty">이 날짜에 정해진 일정이 없어요</div>
@@ -775,44 +866,45 @@ function renderDayDetail(dateStr){
     return;
   }
 
-  const timed = dayItems.filter(i => i.scheduledTime).sort((a,b) => a.scheduledTime.localeCompare(b.scheduledTime));
-  const untimed = dayItems.filter(i => !i.scheduledTime);
+  const timed = dayEntries.filter(e => e.time).sort((a,b) => a.time.localeCompare(b.time));
+  const untimed = dayEntries.filter(e => !e.time);
+
+  function entryRow(entry, showTime){
+    return `<div class="day-detail-item${entry.done ? ' done' : ''}">
+      <button class="checkbox ${entry.done ? 'done' : ''}" data-daycheck="${entry.src}:${entry.id}">${entry.done ? '✓' : ''}</button>
+      ${showTime ? `<span class="day-detail-time">${entry.time}</span>` : ''}
+      <span class="day-detail-text">${entry.text}</span>
+      <button class="del-btn" data-daydel="${entry.src}:${entry.id}">✕</button>
+    </div>`;
+  }
 
   let html = `<div class="day-detail-header">${parseInt(m)}월 ${parseInt(d)}일</div>`;
 
   if(untimed.length > 0){
     html += `<div class="day-detail-section-label">시간 미정</div>`;
-    untimed.forEach(item => {
-      html += `<div class="day-detail-item${item.done ? ' done' : ''}">
-        <button class="checkbox ${item.done ? 'done' : ''}" data-daycheck="${item.id}">${item.done ? '✓' : ''}</button>
-        <span class="day-detail-text">${item.text}</span>
-      </div>`;
-    });
+    untimed.forEach(entry => { html += entryRow(entry, false); });
   }
   if(timed.length > 0){
     html += `<div class="day-detail-section-label">시간대별</div>`;
-    timed.forEach(item => {
-      html += `<div class="day-detail-item${item.done ? ' done' : ''}">
-        <button class="checkbox ${item.done ? 'done' : ''}" data-daycheck="${item.id}">${item.done ? '✓' : ''}</button>
-        <span class="day-detail-time">${item.scheduledTime}</span>
-        <span class="day-detail-text">${item.text}</span>
-      </div>`;
-    });
+    timed.forEach(entry => { html += entryRow(entry, true); });
   }
   panel.innerHTML = html;
 }
 
 document.getElementById('dayDetail').addEventListener('click', (e) => {
   const checkBtn = e.target.closest('[data-daycheck]');
+  const delBtn = e.target.closest('[data-daydel]');
   if(checkBtn){
-    const id = checkBtn.dataset.daycheck;
-    const it = items.find(i => String(i.id) === id);
-    if(it){
-      it.done = !it.done;
-      save();
-      renderDayDetail(selectedDateStr);
-      renderCalendar();
-    }
+    const [src, id] = checkBtn.dataset.daycheck.split(':');
+    toggleEntryDone(src, id);
+    renderDayDetail(selectedDateStr);
+    renderCalendar();
+  }
+  if(delBtn){
+    const [src, id] = delBtn.dataset.daydel.split(':');
+    deleteEntry(src, id);
+    renderDayDetail(selectedDateStr);
+    renderCalendar();
   }
 });
 
@@ -867,6 +959,38 @@ document.getElementById('schedNoTimeBtn').addEventListener('click', () => {
   }
   closeScheduleModal();
 });
+
+// ---------- 새 일정(캘린더 전용) 추가 모달 ----------
+const eventModal = document.getElementById('eventModal');
+
+function openEventModal(){
+  document.getElementById('eventTextInput').value = '';
+  document.getElementById('eventDateInput').value = selectedDateStr || toDateStr(new Date());
+  document.getElementById('eventTimeInput').value = '';
+  eventModal.style.display = 'flex';
+  setTimeout(() => document.getElementById('eventTextInput').focus(), 50);
+}
+function closeEventModal(){
+  eventModal.style.display = 'none';
+}
+
+document.getElementById('addEventBtn').addEventListener('click', openEventModal);
+document.getElementById('eventCancelBtn').addEventListener('click', closeEventModal);
+
+function saveNewEvent(withTime){
+  const text = document.getElementById('eventTextInput').value.trim();
+  const dateVal = document.getElementById('eventDateInput').value;
+  const timeVal = withTime ? document.getElementById('eventTimeInput').value : '';
+  if(!text || !dateVal) return;
+  calendarEvents.push({ id: Date.now(), text, date: dateVal, time: timeVal || null, done: false });
+  saveCalEvents();
+  selectedDateStr = dateVal;
+  renderCalendar();
+  closeEventModal();
+}
+
+document.getElementById('eventSaveBtn').addEventListener('click', () => saveNewEvent(true));
+document.getElementById('eventNoTimeBtn').addEventListener('click', () => saveNewEvent(false));
 
 document.getElementById('toggleDone').addEventListener('click', (e) => {
   showDone = !showDone;
