@@ -353,7 +353,16 @@
     text-decoration: line-through;
     opacity: 0.45;
   }
-  .day-detail-text{ flex: 1; }
+  .day-detail-text{ flex: 1; cursor: pointer; }
+  .day-detail-textwrap{ flex: 1; cursor: pointer; min-width: 0; }
+  .day-detail-note{
+    font-size: 12px;
+    color: var(--brown);
+    opacity: 0.6;
+    margin-top: 2px;
+    white-space: normal;
+    word-break: break-word;
+  }
   .day-detail-time{
     flex:none;
     font-weight: 800;
@@ -541,10 +550,10 @@
 <div class="app">
   <div id="listView">
   <header>
-    <h1>떠올랐다! 💡</h1>
+    <h1>떠올랐다!</h1>
     <p>말하면 바로 기록돼요. 처리했으면 톡 체크!</p>
-    <button id="openCalendarBtn" class="cal-toggle-btn">📅 캘린더로 보기</button>
-    <button id="openScheduledBtn" class="cal-toggle-btn" style="margin-top:8px;">📋 캘린더 이동 스케줄 확인</button>
+    <button id="openCalendarBtn" class="cal-toggle-btn">📅 캘린더!</button>
+    <button id="openScheduledBtn" class="cal-toggle-btn" style="margin-top:8px;">📋 캘린더 이동 스케줄!</button>
   </header>
 
   <div class="mic-zone">
@@ -596,8 +605,10 @@
 
 <div id="eventModal" class="modal-overlay" style="display:none">
   <div class="modal-box">
-    <div class="modal-title">새 일정 추가</div>
-    <input type="text" id="eventTextInput" class="modal-input" placeholder="일정 내용을 입력하세요">
+    <div class="modal-title" id="eventModalTitle">새 일정 추가</div>
+    <input type="text" id="eventTextInput" class="modal-input" placeholder="제목을 입력하세요">
+    <div style="font-size:12px; font-weight:700; color:#3D2E24; opacity:0.6; margin:-4px 0 -6px 2px;">내용</div>
+    <textarea id="eventNoteInput" class="modal-input" placeholder="내용을 입력하세요 (선택)" rows="3" style="resize:vertical; font-family:'Pretendard',sans-serif;"></textarea>
     <input type="date" id="eventDateInput" class="modal-input">
     <input type="time" id="eventTimeInput" class="modal-input">
     <div class="modal-actions">
@@ -871,10 +882,10 @@ function saveCalEvents(){ localStorage.setItem(CAL_EVENTS_KEY, JSON.stringify(ca
 function getDayEntries(dateStr){
   const fromItems = items
     .filter(i => i.scheduledDate === dateStr)
-    .map(i => ({ id: i.id, text: i.text, time: i.scheduledTime, done: i.done, src: 'item' }));
+    .map(i => ({ id: i.id, text: i.text, note: i.note, time: i.scheduledTime, done: i.done, src: 'item' }));
   const fromEvents = calendarEvents
     .filter(e => e.date === dateStr)
-    .map(e => ({ id: e.id, text: e.text, time: e.time, done: e.done, src: 'event' }));
+    .map(e => ({ id: e.id, text: e.text, note: e.note, time: e.time, done: e.done, src: 'event' }));
   return [...fromItems, ...fromEvents];
 }
 
@@ -987,7 +998,10 @@ function renderDayDetail(dateStr){
     return `<div class="day-detail-item${entry.done ? ' done' : ''}">
       <button class="checkbox ${entry.done ? 'done' : ''}" data-daycheck="${entry.src}:${entry.id}">${entry.done ? '✓' : ''}</button>
       ${showTime ? `<span class="day-detail-time">${entry.time}</span>` : ''}
-      <span class="day-detail-text">${entry.text}</span>
+      <div class="day-detail-textwrap" data-dayopen="${entry.src}:${entry.id}">
+        <span class="day-detail-text">${entry.text}</span>
+        ${entry.note ? `<div class="day-detail-note">${entry.note}</div>` : ''}
+      </div>
       <button class="del-btn" data-daydel="${entry.src}:${entry.id}">✕</button>
     </div>`;
   }
@@ -1009,6 +1023,7 @@ document.getElementById('dayDetail').addEventListener('click', (e) => {
   const checkBtn = e.target.closest('[data-daycheck]');
   const delBtn = e.target.closest('[data-daydel]');
   const addBtn = e.target.closest('[data-addevent]');
+  const openBtn = e.target.closest('[data-dayopen]');
   if(checkBtn){
     const [src, id] = checkBtn.dataset.daycheck.split(':');
     toggleEntryDone(src, id);
@@ -1023,6 +1038,10 @@ document.getElementById('dayDetail').addEventListener('click', (e) => {
   }
   if(addBtn){
     openEventModal(addBtn.dataset.addevent);
+  }
+  if(openBtn){
+    const [src, id] = openBtn.dataset.dayopen.split(':');
+    openEventModal(null, src, id);
   }
 });
 
@@ -1078,29 +1097,73 @@ document.getElementById('schedNoTimeBtn').addEventListener('click', () => {
   closeScheduleModal();
 });
 
-// ---------- 새 일정(캘린더 전용) 추가 모달 ----------
+// ---------- 새 일정(캘린더 전용) 추가/수정 모달 ----------
 const eventModal = document.getElementById('eventModal');
+let editingEntrySrc = null;
+let editingEntryId = null;
 
-function openEventModal(dateStr){
-  document.getElementById('eventTextInput').value = '';
-  document.getElementById('eventDateInput').value = dateStr || selectedDateStr || toDateStr(new Date());
-  document.getElementById('eventTimeInput').value = '';
+function findEntry(src, id){
+  if(src === 'item') return items.find(i => String(i.id) === String(id));
+  if(src === 'event') return calendarEvents.find(e => String(e.id) === String(id));
+  return null;
+}
+
+function openEventModal(dateStr, editSrc, editId){
+  editingEntrySrc = editSrc || null;
+  editingEntryId = editId || null;
+
+  const titleEl = document.getElementById('eventModalTitle');
+  if(editingEntrySrc && editingEntryId){
+    const entry = findEntry(editingEntrySrc, editingEntryId);
+    titleEl.textContent = '일정 수정';
+    document.getElementById('eventTextInput').value = entry ? entry.text : '';
+    document.getElementById('eventNoteInput').value = entry?.note || '';
+    document.getElementById('eventDateInput').value = (editingEntrySrc === 'item' ? entry?.scheduledDate : entry?.date) || selectedDateStr || toDateStr(new Date());
+    document.getElementById('eventTimeInput').value = (editingEntrySrc === 'item' ? entry?.scheduledTime : entry?.time) || '';
+  } else {
+    titleEl.textContent = '새 일정 추가';
+    document.getElementById('eventTextInput').value = '';
+    document.getElementById('eventNoteInput').value = '';
+    document.getElementById('eventDateInput').value = dateStr || selectedDateStr || toDateStr(new Date());
+    document.getElementById('eventTimeInput').value = '';
+  }
   eventModal.style.display = 'flex';
   setTimeout(() => document.getElementById('eventTextInput').focus(), 50);
 }
 function closeEventModal(){
   eventModal.style.display = 'none';
+  editingEntrySrc = null;
+  editingEntryId = null;
 }
 
 document.getElementById('eventCancelBtn').addEventListener('click', closeEventModal);
 
 function saveNewEvent(withTime){
   const text = document.getElementById('eventTextInput').value.trim();
+  const note = document.getElementById('eventNoteInput').value.trim();
   const dateVal = document.getElementById('eventDateInput').value;
   const timeVal = withTime ? document.getElementById('eventTimeInput').value : '';
   if(!text || !dateVal) return;
-  calendarEvents.push({ id: Date.now(), text, date: dateVal, time: timeVal || null, done: false });
-  saveCalEvents();
+
+  if(editingEntrySrc && editingEntryId){
+    const entry = findEntry(editingEntrySrc, editingEntryId);
+    if(entry){
+      entry.text = text;
+      entry.note = note || null;
+      if(editingEntrySrc === 'item'){
+        entry.scheduledDate = dateVal;
+        entry.scheduledTime = timeVal || null;
+        save();
+      } else {
+        entry.date = dateVal;
+        entry.time = timeVal || null;
+        saveCalEvents();
+      }
+    }
+  } else {
+    calendarEvents.push({ id: Date.now(), text, note: note || null, date: dateVal, time: timeVal || null, done: false });
+    saveCalEvents();
+  }
   selectedDateStr = dateVal;
   renderCalendar();
   closeEventModal();
