@@ -569,11 +569,6 @@
     <p>말하면 바로 기록돼요. 처리했으면 톡 체크!</p>
     <button id="openCalendarBtn" class="cal-toggle-btn">📅 캘린더!</button>
     <button id="openScheduledBtn" class="cal-toggle-btn" style="margin-top:8px;">📋 캘린더 이동 스케줄!</button>
-    <div style="margin-top:8px; display:flex; gap:8px; justify-content:center;">
-      <button id="backupBtn" class="cal-toggle-btn" style="font-size:12px; padding:6px 12px;">⬇️ 데이터 백업</button>
-      <button id="restoreBtn" class="cal-toggle-btn" style="font-size:12px; padding:6px 12px;">⬆️ 데이터 복원</button>
-    </div>
-    <input type="file" id="restoreInput" accept="application/json" style="display:none">
   </header>
 
   <div class="mic-zone">
@@ -1424,59 +1419,6 @@ cameraInput.addEventListener('change', (e) => {
   };
   reader.readAsDataURL(file);
   cameraInput.value = '';
-});
-
-// ---------- 데이터 백업 / 복원 ----------
-document.getElementById('backupBtn').addEventListener('click', () => {
-  const backup = {
-    items: items,
-    calendarEvents: calendarEvents,
-    exportedAt: new Date().toISOString()
-  };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const dateStr = toDateStr(new Date());
-  a.href = url;
-  a.download = `tteoolradda-backup-${dateStr}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  alert('백업 파일이 다운로드됐어요! 다운로드 폴더를 확인해보세요.');
-});
-
-document.getElementById('restoreBtn').addEventListener('click', () => {
-  document.getElementById('restoreInput').click();
-});
-
-document.getElementById('restoreInput').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader2 = new FileReader();
-  reader2.onload = (ev) => {
-    try{
-      const data = JSON.parse(ev.target.result);
-      if(!Array.isArray(data.items)) throw new Error('올바른 백업 파일이 아니에요');
-      const count = data.items.length + (data.calendarEvents ? data.calendarEvents.length : 0);
-      if(confirm(`백업 파일에서 ${count}개 항목을 불러올까요?\n(현재 데이터에 추가되는 방식이에요, 기존 데이터는 지워지지 않아요)`)){
-        const existingIds = new Set(items.map(i => String(i.id)));
-        data.items.forEach(it => { if(!existingIds.has(String(it.id))) items.push(it); });
-        if(Array.isArray(data.calendarEvents)){
-          const existingEventIds = new Set(calendarEvents.map(ev => String(ev.id)));
-          data.calendarEvents.forEach(ev => { if(!existingEventIds.has(String(ev.id))) calendarEvents.push(ev); });
-          saveCalEvents();
-        }
-        save();
-        render();
-        alert('복원 완료됐어요!');
-      }
-    } catch(err){
-      alert('백업 파일을 읽는 데 실패했어요: ' + err.message);
-    }
-  };
-  reader2.readAsText(file);
-  e.target.value = '';
 });
 
 render();
