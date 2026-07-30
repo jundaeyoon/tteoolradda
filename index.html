@@ -307,6 +307,21 @@
     background: rgba(255,255,255,0.85);
     color: var(--olive-dark);
   }
+  .cal-event-chip.moving{
+    outline: 2.5px dashed var(--brown);
+    animation: movePulse 0.9s infinite;
+  }
+  .day-detail-item.moving{
+    outline: 2.5px dashed var(--brown);
+    animation: movePulse 0.9s infinite;
+  }
+  @keyframes movePulse{
+    0%,100%{ opacity: 1; }
+    50%{ opacity: 0.55; }
+  }
+  .cal-day.move-target{
+    box-shadow: 0 0 0 3px var(--salmon-dark) inset;
+  }
   .add-event-btn{
     display:block;
     width: 100%;
@@ -554,6 +569,11 @@
     <p>말하면 바로 기록돼요. 처리했으면 톡 체크!</p>
     <button id="openCalendarBtn" class="cal-toggle-btn">📅 캘린더!</button>
     <button id="openScheduledBtn" class="cal-toggle-btn" style="margin-top:8px;">📋 캘린더 이동 스케줄!</button>
+    <div style="margin-top:8px; display:flex; gap:8px; justify-content:center;">
+      <button id="backupBtn" class="cal-toggle-btn" style="font-size:12px; padding:6px 12px;">⬇️ 데이터 백업</button>
+      <button id="restoreBtn" class="cal-toggle-btn" style="font-size:12px; padding:6px 12px;">⬆️ 데이터 복원</button>
+    </div>
+    <input type="file" id="restoreInput" accept="application/json" style="display:none">
   </header>
 
   <div class="mic-zone">
@@ -585,6 +605,9 @@
       </div>
     </div>
     <div id="weatherStatus" style="text-align:center; font-size:11px; color:#3D2E24; opacity:0.6; margin-bottom:6px;"></div>
+    <div id="moveBanner" style="display:none; background:#E8927C; color:#FBF8F0; border-radius:12px; padding:9px 12px; margin-bottom:10px; text-align:center; font-size:13px; font-weight:700;">
+      옮길 날짜를 눌러주세요 <button id="cancelMoveBtn" style="margin-left:8px; background:#FBF8F0; color:#3D2E24; border:none; border-radius:8px; padding:3px 10px; font-size:12px; font-weight:700;">취소</button>
+    </div>
     <div class="cal-weekdays">
       <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
     </div>
@@ -874,6 +897,78 @@ initWeather();
 // ---------- 월간 캘린더 ----------
 let calDate = new Date();
 let selectedDateStr = null;
+let movingEntry = null; // { src, id }
+
+function setMoveMode(src, id){
+  movingEntry = { src, id };
+  document.getElementById('moveBanner').style.display = 'block';
+  renderCalendar();
+  if(selectedDateStr) renderDayDetail(selectedDateStr);
+}
+function clearMoveMode(){
+  movingEntry = null;
+  document.getElementById('moveBanner').style.display = 'none';
+  renderCalendar();
+  if(selectedDateStr) renderDayDetail(selectedDateStr);
+}
+function moveEntryToDate(src, id, newDateStr){
+  const entry = findEntry(src, id);
+  if(!entry) return;
+  if(src === 'item'){
+    entry.scheduledDate = newDateStr;
+    save();
+  } else {
+    entry.date = newDateStr;
+    saveCalEvents();
+  }
+}
+
+// ---------- 길게 눌러서 이동하기 ----------
+let longPressJustFired = false;
+
+function attachLongPress(el, onLongPress){
+  let timer = null;
+  let moved = false;
+  let startX = 0, startY = 0;
+
+  const start = (x, y) => {
+    moved = false;
+    startX = x; startY = y;
+    timer = setTimeout(() => {
+      if(!moved){
+        if(navigator.vibrate) navigator.vibrate(30);
+        longPressJustFired = true;
+        setTimeout(() => { longPressJustFired = false; }, 400);
+        onLongPress();
+      }
+    }, 480);
+  };
+  const move = (x, y) => {
+    if(Math.abs(x-startX) > 12 || Math.abs(y-startY) > 12){
+      moved = true;
+      clearTimeout(timer);
+    }
+  };
+  const cancel = () => { clearTimeout(timer); };
+
+  el.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    start(t.clientX, t.clientY);
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    move(t.clientX, t.clientY);
+  }, { passive: true });
+  el.addEventListener('touchend', cancel);
+  el.addEventListener('touchcancel', cancel);
+
+  // 데스크탑 테스트용(마우스)
+  el.addEventListener('mousedown', (e) => start(e.clientX, e.clientY));
+  el.addEventListener('mousemove', (e) => { if(timer) move(e.clientX, e.clientY); });
+  el.addEventListener('mouseup', cancel);
+  el.addEventListener('mouseleave', cancel);
+}
+
 
 const CAL_EVENTS_KEY = 'tteoolradda-calendar-events';
 let calendarEvents = JSON.parse(localStorage.getItem(CAL_EVENTS_KEY) || '[]');
@@ -949,8 +1044,9 @@ function renderCalendar(){
       if(dayEntries.length > 0){
         const chips = dayEntries.map(entry => {
           const label = (entry.time ? entry.time + ' ' : '') + entry.text;
-          const cls = 'cal-event-chip' + (entry.src === 'item' ? ' is-todo' : '') + (entry.done ? ' done' : '');
-          return `<div class="${cls}">${label}</div>`;
+          const isMovingThis = movingEntry && movingEntry.src === entry.src && String(movingEntry.id) === String(entry.id);
+          const cls = 'cal-event-chip' + (entry.src === 'item' ? ' is-todo' : '') + (entry.done ? ' done' : '') + (isMovingThis ? ' moving' : '');
+          return `<div class="${cls}" data-moveentry="${entry.src}:${entry.id}">${label}</div>`;
         }).join('');
         eventsHtml = `<div class="cal-day-events">${chips}</div>`;
       }
@@ -961,12 +1057,26 @@ function renderCalendar(){
 
     if(cell.dateStr){
       div.addEventListener('click', () => {
+        if(longPressJustFired){ longPressJustFired = false; return; }
+        if(movingEntry){
+          moveEntryToDate(movingEntry.src, movingEntry.id, cell.dateStr);
+          selectedDateStr = cell.dateStr;
+          clearMoveMode();
+          return;
+        }
         selectedDateStr = cell.dateStr;
         renderCalendar();
         renderDayDetail(cell.dateStr);
       });
     }
     grid.appendChild(div);
+  });
+
+  grid.querySelectorAll('[data-moveentry]').forEach(chipEl => {
+    attachLongPress(chipEl, () => {
+      const [src, id] = chipEl.dataset.moveentry.split(':');
+      setMoveMode(src, id);
+    });
   });
 
   if(selectedDateStr){
@@ -995,7 +1105,8 @@ function renderDayDetail(dateStr){
   const untimed = dayEntries.filter(e => !e.time);
 
   function entryRow(entry, showTime){
-    return `<div class="day-detail-item${entry.done ? ' done' : ''}">
+    const isMovingThis = movingEntry && movingEntry.src === entry.src && String(movingEntry.id) === String(entry.id);
+    return `<div class="day-detail-item${entry.done ? ' done' : ''}${isMovingThis ? ' moving' : ''}" data-moveentry="${entry.src}:${entry.id}">
       <button class="checkbox ${entry.done ? 'done' : ''}" data-daycheck="${entry.src}:${entry.id}">${entry.done ? '✓' : ''}</button>
       ${showTime ? `<span class="day-detail-time">${entry.time}</span>` : ''}
       <div class="day-detail-textwrap" data-dayopen="${entry.src}:${entry.id}">
@@ -1017,9 +1128,17 @@ function renderDayDetail(dateStr){
     timed.forEach(entry => { html += entryRow(entry, true); });
   }
   panel.innerHTML = html;
+
+  panel.querySelectorAll('.day-detail-textwrap[data-dayopen]').forEach(wrapEl => {
+    attachLongPress(wrapEl, () => {
+      const [src, id] = wrapEl.dataset.dayopen.split(':');
+      setMoveMode(src, id);
+    });
+  });
 }
 
 document.getElementById('dayDetail').addEventListener('click', (e) => {
+  if(longPressJustFired){ longPressJustFired = false; return; }
   const checkBtn = e.target.closest('[data-daycheck]');
   const delBtn = e.target.closest('[data-daydel]');
   const addBtn = e.target.closest('[data-addevent]');
@@ -1053,6 +1172,30 @@ document.getElementById('nextMonthBtn').addEventListener('click', () => {
   calDate.setMonth(calDate.getMonth() + 1);
   renderCalendar();
 });
+document.getElementById('cancelMoveBtn').addEventListener('click', clearMoveMode);
+
+// ---------- 캘린더 좌우 스와이프로 월 이동 ----------
+(function(){
+  const grid = document.getElementById('calGrid');
+  let sx = 0, sy = 0, tracking = false;
+  grid.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    sx = t.clientX; sy = t.clientY;
+    tracking = true;
+  }, { passive: true });
+  grid.addEventListener('touchend', (e) => {
+    if(!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if(Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5){
+      if(dx < 0){ calDate.setMonth(calDate.getMonth() + 1); }
+      else { calDate.setMonth(calDate.getMonth() - 1); }
+      renderCalendar();
+    }
+  });
+})();
 
 // ---------- 일정 지정 모달 ----------
 let schedulingItemId = null;
@@ -1281,6 +1424,59 @@ cameraInput.addEventListener('change', (e) => {
   };
   reader.readAsDataURL(file);
   cameraInput.value = '';
+});
+
+// ---------- 데이터 백업 / 복원 ----------
+document.getElementById('backupBtn').addEventListener('click', () => {
+  const backup = {
+    items: items,
+    calendarEvents: calendarEvents,
+    exportedAt: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = toDateStr(new Date());
+  a.href = url;
+  a.download = `tteoolradda-backup-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  alert('백업 파일이 다운로드됐어요! 다운로드 폴더를 확인해보세요.');
+});
+
+document.getElementById('restoreBtn').addEventListener('click', () => {
+  document.getElementById('restoreInput').click();
+});
+
+document.getElementById('restoreInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader2 = new FileReader();
+  reader2.onload = (ev) => {
+    try{
+      const data = JSON.parse(ev.target.result);
+      if(!Array.isArray(data.items)) throw new Error('올바른 백업 파일이 아니에요');
+      const count = data.items.length + (data.calendarEvents ? data.calendarEvents.length : 0);
+      if(confirm(`백업 파일에서 ${count}개 항목을 불러올까요?\n(현재 데이터에 추가되는 방식이에요, 기존 데이터는 지워지지 않아요)`)){
+        const existingIds = new Set(items.map(i => String(i.id)));
+        data.items.forEach(it => { if(!existingIds.has(String(it.id))) items.push(it); });
+        if(Array.isArray(data.calendarEvents)){
+          const existingEventIds = new Set(calendarEvents.map(ev => String(ev.id)));
+          data.calendarEvents.forEach(ev => { if(!existingEventIds.has(String(ev.id))) calendarEvents.push(ev); });
+          saveCalEvents();
+        }
+        save();
+        render();
+        alert('복원 완료됐어요!');
+      }
+    } catch(err){
+      alert('백업 파일을 읽는 데 실패했어요: ' + err.message);
+    }
+  };
+  reader2.readAsText(file);
+  e.target.value = '';
 });
 
 render();
