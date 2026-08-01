@@ -281,9 +281,42 @@
     margin-bottom: 4px;
   }
   .cal-grid{
+    display:flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .cal-week{
+    position: relative;
     display:grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 3px;
+  }
+  .cal-bar{
+    position: absolute;
+    height: 15px;
+    border-radius: 5px;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--paper);
+    background: var(--salmon);
+    display:flex;
+    align-items:center;
+    padding: 0 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    z-index: 2;
+    box-sizing: border-box;
+  }
+  .cal-bar.done{
+    text-decoration: line-through;
+    opacity: 0.6;
+    background: var(--brown);
+  }
+  .cal-bar.moving{
+    outline: 2px dashed var(--brown);
+    animation: movePulse 0.9s infinite;
   }
   .cal-day{
     min-height: 78px;
@@ -680,7 +713,10 @@
     <input type="text" id="eventTextInput" class="modal-input" placeholder="제목을 입력하세요">
     <div style="font-size:12px; font-weight:700; color:#3D2E24; opacity:0.6; margin:-4px 0 -6px 2px;">내용</div>
     <textarea id="eventNoteInput" class="modal-input" placeholder="내용을 입력하세요 (선택)" rows="3" style="resize:vertical; font-family:'Pretendard',sans-serif;"></textarea>
+    <div style="font-size:12px; font-weight:700; color:#3D2E24; opacity:0.6; margin:-4px 0 -6px 2px;">시작 날짜</div>
     <input type="date" id="eventDateInput" class="modal-input">
+    <div style="font-size:12px; font-weight:700; color:#3D2E24; opacity:0.6; margin:-4px 0 -6px 2px;">마감 날짜 (여러 날이면)</div>
+    <input type="date" id="eventEndDateInput" class="modal-input">
     <input type="time" id="eventTimeInput" class="modal-input">
     <div class="modal-actions">
       <button id="eventNoTimeBtn" class="modal-btn-secondary">시간 없이 저장</button>
@@ -966,7 +1002,18 @@ function moveEntryToDate(src, id, newDateStr){
     entry.scheduledDate = newDateStr;
     save();
   } else {
-    entry.date = newDateStr;
+    if(entry.endDate){
+      const oldStart = new Date(entry.date + 'T00:00:00');
+      const oldEnd = new Date(entry.endDate + 'T00:00:00');
+      const durationDays = Math.round((oldEnd - oldStart) / 86400000);
+      const newStart = new Date(newDateStr + 'T00:00:00');
+      const newEnd = new Date(newStart);
+      newEnd.setDate(newEnd.getDate() + durationDays);
+      entry.date = newDateStr;
+      entry.endDate = toDateStr(newEnd);
+    } else {
+      entry.date = newDateStr;
+    }
     saveCalEvents();
   }
 }
@@ -1022,13 +1069,29 @@ const CAL_EVENTS_KEY = 'tteoolradda-calendar-events';
 let calendarEvents = JSON.parse(localStorage.getItem(CAL_EVENTS_KEY) || '[]');
 function saveCalEvents(){ localStorage.setItem(CAL_EVENTS_KEY, JSON.stringify(calendarEvents)); }
 
+function isMultiDay(ev){
+  return ev && ev.endDate && ev.endDate !== ev.date;
+}
+
+// 날짜 상세보기용: 그 날짜를 포함하는 모든 항목 (여러날 일정도 포함)
 function getDayEntries(dateStr){
   const fromItems = items
     .filter(i => i.scheduledDate === dateStr)
     .map(i => ({ id: i.id, text: i.text, note: i.note, time: i.scheduledTime, done: i.done, src: 'item' }));
   const fromEvents = calendarEvents
-    .filter(e => e.date === dateStr)
-    .map(e => ({ id: e.id, text: e.text, note: e.note, time: e.time, done: e.done, src: 'event' }));
+    .filter(e => e.date <= dateStr && (e.endDate || e.date) >= dateStr)
+    .map(e => ({ id: e.id, text: e.text, note: e.note, time: e.time, done: e.done, src: 'event', isMultiDay: isMultiDay(e), date: e.date, endDate: e.endDate }));
+  return [...fromItems, ...fromEvents];
+}
+
+// 캘린더 칸(그리드) 표시용: 하루짜리 항목만 (여러날 일정은 막대바로 따로 표시)
+function getDaySingleEntries(dateStr){
+  const fromItems = items
+    .filter(i => i.scheduledDate === dateStr)
+    .map(i => ({ id: i.id, text: i.text, time: i.scheduledTime, done: i.done, src: 'item' }));
+  const fromEvents = calendarEvents
+    .filter(e => e.date === dateStr && !isMultiDay(e))
+    .map(e => ({ id: e.id, text: e.text, time: e.time, done: e.done, src: 'event' }));
   return [...fromItems, ...fromEvents];
 }
 
@@ -1063,31 +1126,54 @@ function renderCalendar(){
   const firstDay = new Date(year, month, 1);
   const startOffset = firstDay.getDay();
   const daysInMonth = new Date(year, month+1, 0).getDate();
-  const daysInPrevMonth = new Date(year, month, 0).getDate();
   const todayStr = toDateStr(new Date());
+  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
 
   const cells = [];
-  for(let i = startOffset - 1; i >= 0; i--){
-    cells.push({ day: daysInPrevMonth - i, other: true, dateStr: null });
-  }
-  for(let d = 1; d <= daysInMonth; d++){
-    cells.push({ day: d, other: false, dateStr: `${year}-${pad2(month+1)}-${pad2(d)}` });
-  }
-  let nextMonthDay = 1;
-  while(cells.length % 7 !== 0){
-    cells.push({ day: nextMonthDay, other: true, dateStr: null });
-    nextMonthDay++;
+  for(let i = 0; i < totalCells; i++){
+    const dayOffset = i - startOffset + 1;
+    const cellDate = new Date(year, month, dayOffset);
+    cells.push({
+      day: cellDate.getDate(),
+      other: dayOffset < 1 || dayOffset > daysInMonth,
+      dateStr: toDateStr(cellDate)
+    });
   }
 
-  cells.forEach(cell => {
-    const div = document.createElement('div');
-    div.className = 'cal-day' + (cell.other ? ' other-month' : '');
-    if(cell.dateStr === todayStr) div.classList.add('today');
-    if(cell.dateStr && cell.dateStr === selectedDateStr) div.classList.add('selected');
+  const BAR_H = 15, BAR_GAP = 3, DAY_NUM_H = 20;
+  const multiDayEvents = calendarEvents.filter(isMultiDay);
 
-    let eventsHtml = '';
-    if(cell.dateStr){
-      const dayEntries = getDayEntries(cell.dateStr)
+  for(let w = 0; w < cells.length; w += 7){
+    const week = cells.slice(w, w+7);
+    const weekStart = week[0].dateStr, weekEnd = week[6].dateStr;
+
+    const weekEvents = multiDayEvents
+      .filter(e => e.date <= weekEnd && e.endDate >= weekStart)
+      .sort((a,b) => a.date.localeCompare(b.date));
+
+    const lanes = []; // 각 레인에 배정된 [startCol,endCol] 목록
+    const barsInfo = weekEvents.map(e => {
+      const startCol = Math.max(0, Math.round((new Date(e.date) - new Date(weekStart)) / 86400000));
+      const endCol = Math.min(6, Math.round((new Date(e.endDate) - new Date(weekStart)) / 86400000));
+      let lane = lanes.findIndex(occ => !occ.some(([s,en]) => startCol <= en && endCol >= s));
+      if(lane === -1){ lane = lanes.length; lanes.push([]); }
+      lanes[lane].push([startCol, endCol]);
+      return { e, startCol, endCol, lane };
+    });
+    const lanesCount = lanes.length;
+    const spacerH = lanesCount > 0 ? (DAY_NUM_H + lanesCount * (BAR_H + BAR_GAP)) : 0;
+
+    const weekDiv = document.createElement('div');
+    weekDiv.className = 'cal-week';
+
+    week.forEach(cell => {
+      const div = document.createElement('div');
+      div.className = 'cal-day' + (cell.other ? ' other-month' : '');
+      if(cell.dateStr === todayStr) div.classList.add('today');
+      if(cell.dateStr === selectedDateStr) div.classList.add('selected');
+
+      let eventsHtml = '';
+      const dayEntries = getDaySingleEntries(cell.dateStr)
         .sort((a,b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
       if(dayEntries.length > 0){
         const chips = dayEntries.map(entry => {
@@ -1098,12 +1184,11 @@ function renderCalendar(){
         }).join('');
         eventsHtml = `<div class="cal-day-events">${chips}</div>`;
       }
-    }
-    const weatherEmoji = cell.dateStr && weatherByDate[cell.dateStr] !== undefined ? weatherIcon(weatherByDate[cell.dateStr]) : '';
-    const weatherHtml = weatherEmoji ? `<img class="cal-day-weather" src="${weatherEmoji}" alt="날씨">` : '';
-    div.innerHTML = `${weatherHtml}<div class="day-num">${cell.day}</div>${eventsHtml}`;
+      const weatherEmoji = weatherByDate[cell.dateStr] !== undefined ? weatherIcon(weatherByDate[cell.dateStr]) : '';
+      const weatherHtml = weatherEmoji ? `<img class="cal-day-weather" src="${weatherEmoji}" alt="날씨">` : '';
+      const spacerHtml = spacerH > 0 ? `<div style="height:${lanesCount * (BAR_H + BAR_GAP)}px"></div>` : '';
+      div.innerHTML = `${weatherHtml}<div class="day-num">${cell.day}</div>${spacerHtml}${eventsHtml}`;
 
-    if(cell.dateStr){
       div.addEventListener('click', () => {
         if(longPressJustFired){ longPressJustFired = false; return; }
         if(movingEntry){
@@ -1116,11 +1201,32 @@ function renderCalendar(){
         renderCalendar();
         renderDayDetail(cell.dateStr);
       });
-    }
-    grid.appendChild(div);
-  });
+      weekDiv.appendChild(div);
+    });
 
-  grid.querySelectorAll('[data-moveentry]').forEach(chipEl => {
+    barsInfo.forEach(({e, startCol, endCol, lane}) => {
+      const bar = document.createElement('div');
+      const isMovingThis = movingEntry && movingEntry.src === 'event' && String(movingEntry.id) === String(e.id);
+      bar.className = 'cal-bar' + (e.done ? ' done' : '') + (isMovingThis ? ' moving' : '');
+      bar.style.left = `calc(${startCol}/7*100% + 2px)`;
+      bar.style.width = `calc(${(endCol-startCol+1)}/7*100% - 4px)`;
+      bar.style.top = `${DAY_NUM_H + lane*(BAR_H+BAR_GAP)}px`;
+      bar.textContent = e.text;
+      bar.dataset.moveentry = `event:${e.id}`;
+      bar.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        if(longPressJustFired){ longPressJustFired = false; return; }
+        if(movingEntry) return;
+        openEventModal(null, 'event', e.id);
+      });
+      attachLongPress(bar, () => setMoveMode('event', e.id));
+      weekDiv.appendChild(bar);
+    });
+
+    grid.appendChild(weekDiv);
+  }
+
+  grid.querySelectorAll('.cal-event-chip[data-moveentry]').forEach(chipEl => {
     attachLongPress(chipEl, () => {
       const [src, id] = chipEl.dataset.moveentry.split(':');
       setMoveMode(src, id);
@@ -1149,8 +1255,15 @@ function renderDayDetail(dateStr){
     return;
   }
 
-  const timed = dayEntries.filter(e => e.time).sort((a,b) => a.time.localeCompare(b.time));
-  const untimed = dayEntries.filter(e => !e.time);
+  const multiDay = dayEntries.filter(e => e.isMultiDay);
+  const timed = dayEntries.filter(e => !e.isMultiDay && e.time).sort((a,b) => a.time.localeCompare(b.time));
+  const untimed = dayEntries.filter(e => !e.isMultiDay && !e.time);
+
+  function formatRange(entry){
+    const [sy,sm,sd] = entry.date.split('-');
+    const [ey,em,ed] = entry.endDate.split('-');
+    return `${parseInt(sm)}/${parseInt(sd)} ~ ${parseInt(em)}/${parseInt(ed)}`;
+  }
 
   function entryRow(entry, showTime){
     const isMovingThis = movingEntry && movingEntry.src === entry.src && String(movingEntry.id) === String(entry.id);
@@ -1159,6 +1272,7 @@ function renderDayDetail(dateStr){
       ${showTime ? `<span class="day-detail-time">${entry.time}</span>` : ''}
       <div class="day-detail-textwrap" data-dayopen="${entry.src}:${entry.id}">
         <span class="day-detail-text">${entry.text}</span>
+        ${entry.isMultiDay ? `<div class="day-detail-note">📅 ${formatRange(entry)}</div>` : ''}
         ${entry.note ? `<div class="day-detail-note">${entry.note}</div>` : ''}
       </div>
       <button class="del-btn" data-daydel="${entry.src}:${entry.id}">✕</button>
@@ -1167,6 +1281,10 @@ function renderDayDetail(dateStr){
 
   let html = `<div class="day-detail-header">${parseInt(m)}월 ${parseInt(d)}일</div>${addBtnHtml}`;
 
+  if(multiDay.length > 0){
+    html += `<div class="day-detail-section-label">여러 날 일정</div>`;
+    multiDay.forEach(entry => { html += entryRow(entry, false); });
+  }
   if(untimed.length > 0){
     html += `<div class="day-detail-section-label">시간 미정</div>`;
     untimed.forEach(entry => { html += entryRow(entry, false); });
@@ -1310,12 +1428,14 @@ function openEventModal(dateStr, editSrc, editId){
     document.getElementById('eventTextInput').value = entry ? entry.text : '';
     document.getElementById('eventNoteInput').value = entry?.note || '';
     document.getElementById('eventDateInput').value = (editingEntrySrc === 'item' ? entry?.scheduledDate : entry?.date) || selectedDateStr || toDateStr(new Date());
+    document.getElementById('eventEndDateInput').value = (editingEntrySrc === 'event' ? entry?.endDate : '') || '';
     document.getElementById('eventTimeInput').value = (editingEntrySrc === 'item' ? entry?.scheduledTime : entry?.time) || '';
   } else {
     titleEl.textContent = '새 일정 추가';
     document.getElementById('eventTextInput').value = '';
     document.getElementById('eventNoteInput').value = '';
     document.getElementById('eventDateInput').value = dateStr || selectedDateStr || toDateStr(new Date());
+    document.getElementById('eventEndDateInput').value = '';
     document.getElementById('eventTimeInput').value = '';
   }
   eventModal.style.display = 'flex';
@@ -1333,8 +1453,11 @@ function saveNewEvent(withTime){
   const text = document.getElementById('eventTextInput').value.trim();
   const note = document.getElementById('eventNoteInput').value.trim();
   const dateVal = document.getElementById('eventDateInput').value;
+  let endDateVal = document.getElementById('eventEndDateInput').value || null;
   const timeVal = withTime ? document.getElementById('eventTimeInput').value : '';
   if(!text || !dateVal) return;
+  if(endDateVal && endDateVal < dateVal) endDateVal = dateVal; // 마감일이 시작일보다 빠르면 보정
+  if(endDateVal === dateVal) endDateVal = null; // 같은 날이면 단일 일정으로 취급
 
   if(editingEntrySrc && editingEntryId){
     const entry = findEntry(editingEntrySrc, editingEntryId);
@@ -1347,12 +1470,13 @@ function saveNewEvent(withTime){
         save();
       } else {
         entry.date = dateVal;
+        entry.endDate = endDateVal;
         entry.time = timeVal || null;
         saveCalEvents();
       }
     }
   } else {
-    calendarEvents.push({ id: Date.now(), text, note: note || null, date: dateVal, time: timeVal || null, done: false });
+    calendarEvents.push({ id: Date.now(), text, note: note || null, date: dateVal, endDate: endDateVal, time: timeVal || null, done: false });
     saveCalEvents();
   }
   selectedDateStr = dateVal;
