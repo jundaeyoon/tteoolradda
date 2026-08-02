@@ -352,8 +352,8 @@
   .cal-day.other-month{ opacity: 0.35; }
   .cal-day.today{ border-color: var(--salmon); }
   .cal-day.today .day-num{ color: var(--salmon-dark); }
-  .cal-day.selected{ background: var(--salmon); border-color: var(--salmon-dark); }
-  .cal-day.selected .day-num{ color: var(--paper); }
+  .cal-day.selected{ background: var(--paper); border: 3px solid var(--brown); }
+  .cal-day.selected .day-num{ color: var(--brown); }
   .cal-day-events{
     display:flex;
     flex-direction: column;
@@ -380,10 +380,6 @@
     text-decoration: line-through;
     opacity: 0.6;
     background: var(--brown);
-  }
-  .cal-day.selected .cal-event-chip{
-    background: rgba(255,255,255,0.85);
-    color: var(--olive-dark);
   }
   .cal-event-chip.moving{
     outline: 2.5px dashed var(--brown);
