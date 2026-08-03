@@ -981,6 +981,36 @@ function initWeather(){
 }
 initWeather();
 
+// ---------- 오후 1시 알림 ----------
+if('Notification' in window && Notification.permission === 'default'){
+  Notification.requestPermission();
+}
+
+function getTodayEntriesForNotify(){
+  const todayStr = toDateStr(new Date());
+  const fromItems = items
+    .filter(i => i.scheduledDate === todayStr && !i.done)
+    .map(i => i.text);
+  const fromEvents = calendarEvents
+    .filter(e => e.date <= todayStr && (e.endDate || e.date) >= todayStr && !e.done)
+    .map(e => e.text);
+  return [...fromItems, ...fromEvents];
+}
+
+function checkOneOClockNotify(){
+  const now = new Date();
+  const todayStr = toDateStr(now);
+  const lastNotified = localStorage.getItem('tteoolradda-last-notify');
+  if(now.getHours() === 13 && lastNotified !== todayStr){
+    const todos = getTodayEntriesForNotify();
+    if(todos.length > 0 && 'Notification' in window && Notification.permission === 'granted'){
+      const body = todos.map(t => `• ${t}`).join('\n');
+      new Notification('지금 이거 처리해 빨리!', { body: body });
+    }
+    localStorage.setItem('tteoolradda-last-notify', todayStr);
+  }
+}
+
 // ---------- 월간 캘린더 ----------
 let calDate = new Date();
 let selectedDateStr = null;
@@ -1615,6 +1645,9 @@ cameraInput.addEventListener('change', (e) => {
 });
 
 render();
+
+setInterval(checkOneOClockNotify, 30000);
+checkOneOClockNotify();
 
 // ---------- 스플래시 화면 ----------
 (function(){
