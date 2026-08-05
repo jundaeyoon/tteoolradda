@@ -520,6 +520,10 @@
     color: var(--brown);
     text-align: left;
   }
+  input.modal-input{
+    height: 44px;
+    line-height: normal;
+  }
   .modal-actions{
     display:flex;
     gap: 8px;
@@ -719,6 +723,7 @@
     <input type="date" id="eventDateInput" class="modal-input">
     <div style="font-size:12px; font-weight:700; color:#3D2E24; opacity:0.6; margin:-4px 0 -6px 2px;">마감 날짜 (여러 날이면)</div>
     <input type="date" id="eventEndDateInput" class="modal-input">
+    <div style="font-size:12px; font-weight:700; color:#3D2E24; opacity:0.6; margin:-4px 0 -6px 2px;">시간</div>
     <input type="time" id="eventTimeInput" class="modal-input">
     <div class="modal-actions">
       <button id="eventNoTimeBtn" class="modal-btn-secondary">시간 없이 저장</button>
