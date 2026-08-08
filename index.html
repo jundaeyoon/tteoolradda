@@ -177,9 +177,55 @@
     border: 2px solid var(--brown);
     margin-top: 8px;
     display: block;
+    cursor: pointer;
   }
   .item.done .item-photo{
     opacity: 0.5;
+  }
+
+  /* ---- 사진 확대보기 ---- */
+  #photoViewer{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 3000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    touch-action: none;
+  }
+  #photoViewer.open{ display: flex; }
+  #photoViewerImg{
+    max-width: 100%;
+    max-height: 100%;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-drag: none;
+    transform-origin: center center;
+  }
+  #photoViewerClose{
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: none;
+    font-size: 20px;
+    z-index: 3001;
+    cursor: pointer;
+  }
+  #photoViewerHint{
+    position: absolute;
+    bottom: 24px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
   }
 
   /* ---- 리스트 ---- */
@@ -746,6 +792,12 @@
   </div>
 </div>
 
+<div id="photoViewer">
+  <button id="photoViewerClose">✕</button>
+  <img id="photoViewerImg" src="" alt="사진 확대보기">
+  <div id="photoViewerHint">손가락으로 확대/이동 · 두 번 탭하면 확대</div>
+</div>
+
 <script>
 
 // ---------- 데이터 (localStorage) ----------
@@ -798,6 +850,8 @@ function render(){
 }
 
 document.getElementById('itemList').addEventListener('click', (e) => {
+  const photoEl = e.target.closest('.item-photo');
+  if(photoEl){ openPhotoViewer(photoEl.src); return; }
   const checkBtn = e.target.closest('.checkbox');
   const delBtn = e.target.closest('.del-btn');
   const editBtn = e.target.closest('.edit-btn');
@@ -1653,6 +1707,97 @@ render();
 
 setInterval(checkOneOClockNotify, 30000);
 checkOneOClockNotify();
+
+// ---------- 사진 확대보기 (핀치줌 / 이동 / 더블탭) ----------
+(function(){
+  const viewer = document.getElementById('photoViewer');
+  const img = document.getElementById('photoViewerImg');
+  const closeBtn = document.getElementById('photoViewerClose');
+
+  let scale = 1, tx = 0, ty = 0;
+  let startScale = 1, startTx = 0, startTy = 0;
+  let startDist = 0, startMidX = 0, startMidY = 0;
+  let dragging = false, dragStartX = 0, dragStartY = 0;
+  let lastTapTime = 0;
+
+  function applyTransform(){
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+  function resetTransform(){
+    scale = 1; tx = 0; ty = 0;
+    applyTransform();
+  }
+
+  window.openPhotoViewer = function(src){
+    img.src = src;
+    resetTransform();
+    viewer.classList.add('open');
+  };
+  function closeViewer(){
+    viewer.classList.remove('open');
+  }
+  closeBtn.addEventListener('click', closeViewer);
+  viewer.addEventListener('click', (e) => {
+    if(e.target === viewer) closeViewer();
+  });
+
+  function dist(t1, t2){
+    return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+  }
+
+  img.addEventListener('touchstart', (e) => {
+    if(e.touches.length === 2){
+      startDist = dist(e.touches[0], e.touches[1]);
+      startScale = scale;
+      startMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      startMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      startTx = tx; startTy = ty;
+      dragging = false;
+    } else if(e.touches.length === 1){
+      const now = Date.now();
+      if(now - lastTapTime < 300){
+        // 더블탭: 확대<->원래크기 토글
+        if(scale > 1){ resetTransform(); }
+        else { scale = 2.4; applyTransform(); }
+        lastTapTime = 0;
+      } else {
+        lastTapTime = now;
+      }
+      dragging = true;
+      dragStartX = e.touches[0].clientX - tx;
+      dragStartY = e.touches[0].clientY - ty;
+    }
+  }, { passive: true });
+
+  img.addEventListener('touchmove', (e) => {
+    if(e.touches.length === 2){
+      const newDist = dist(e.touches[0], e.touches[1]);
+      scale = Math.min(5, Math.max(1, startScale * (newDist / startDist)));
+      tx = startTx + ((e.touches[0].clientX + e.touches[1].clientX)/2 - startMidX);
+      ty = startTy + ((e.touches[0].clientY + e.touches[1].clientY)/2 - startMidY);
+      applyTransform();
+    } else if(e.touches.length === 1 && dragging && scale > 1){
+      tx = e.touches[0].clientX - dragStartX;
+      ty = e.touches[0].clientY - dragStartY;
+      applyTransform();
+    }
+  }, { passive: true });
+
+  img.addEventListener('touchend', () => {
+    dragging = false;
+    if(scale < 1.02){ resetTransform(); }
+  });
+
+  // 데스크탑 테스트용: 휠로 확대, 더블클릭으로 리셋
+  img.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    scale = Math.min(5, Math.max(1, scale + (e.deltaY < 0 ? 0.2 : -0.2)));
+    applyTransform();
+  });
+  img.addEventListener('dblclick', () => {
+    if(scale > 1) resetTransform(); else { scale = 2.4; applyTransform(); }
+  });
+})();
 
 // ---------- 스플래시 화면 ----------
 (function(){
